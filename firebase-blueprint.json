@@ -1,0 +1,69 @@
+{
+  "entities": {
+    "users": {
+      "title": "User Accounts & Permissions",
+      "description": "Danh sách người dùng và phân quyền truy cập hệ thống",
+      "properties": {
+        "uid": { "type": "string", "description": "User ID" },
+        "email": { "type": "string", "description": "Email Google" },
+        "displayName": { "type": "string", "description": "Họ tên người dùng" },
+        "role": { "type": "string", "description": "ADMIN | STAFF | VIEWER" },
+        "unitName": { "type": "string", "description": "Đơn vị công tác" },
+        "active": { "type": "boolean", "description": "Trạng thái kích hoạt" },
+        "createdAt": { "type": "string", "description": "Ngày tạo" }
+      },
+      "required": ["email", "displayName", "role"]
+    },
+    "reports": {
+      "title": "Monthly Disease Reports",
+      "description": "Báo cáo tháng số liệu bệnh không lây nhiễm",
+      "properties": {
+        "id": { "type": "string" },
+        "month": { "type": "number" },
+        "year": { "type": "number" },
+        "details": { "type": "array" },
+        "isLocked": { "type": "boolean" },
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["month", "year", "details"]
+    },
+    "diseases": {
+      "title": "Disease Catalog",
+      "description": "Danh mục các nhóm bệnh mạn tính",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "order": { "type": "number" }
+      },
+      "required": ["id", "code", "name"]
+    },
+    "unitConfig": {
+      "title": "Unit Configuration",
+      "description": "Cấu hình tên Trạm Y tế, Quận/Huyện, Tỉnh/Thành",
+      "properties": {
+        "unitName": { "type": "string" },
+        "districtName": { "type": "string" },
+        "provinceName": { "type": "string" },
+        "headTitle": { "type": "string" },
+        "reporterTitle": { "type": "string" }
+      }
+    },
+    "auditLogs": {
+      "title": "Audit Logs",
+      "description": "Nhật ký hoạt động thao tác hệ thống",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "action": { "type": "string" },
+        "targetType": { "type": "string" },
+        "targetId": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    }
+  }
+}

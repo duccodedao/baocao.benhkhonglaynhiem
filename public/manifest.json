@@ -1,0 +1,22 @@
+{
+  "short_name": "NCD Hiệp Thành",
+  "name": "Báo cáo NCD & Ung thư - Trạm Y tế Phường Hiệp Thành",
+  "icons": [
+    {
+      "src": "assets/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0f172a",
+  "theme_color": "#e11d48",
+  "display": "standalone",
+  "orientation": "any",
+  "description": "Hệ thống quản lý báo cáo tháng bệnh không lây nhiễm (NCD) Trạm Y tế phường Hiệp Thành"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Báo cáo NCD & Ung thư - Trạm Y tế Phường Hiệp Thành",
+  "description": "Hệ thống quản lý báo cáo tháng bệnh không lây nhiễm (NCD), ung thư và danh sách quản lý bệnh nhân mạn tính Trạm Y tế phường Hiệp Thành, Cà Mau.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

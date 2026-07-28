@@ -1,0 +1,3 @@
+export const CANCER_TYPES = [
+  'K Bàng Quang', 'K Bóng vater', 'K Buồng trứng', 'K Cổ tử cung', 'K Da', 'K Dạ Dày', 'K Đại tràng', 'K Đầu tụy', 'K Dương vật', 'K Gan', 'K Hạch', 'K Hầu họng', 'K Hầu mũi', 'K Hồi tràng', 'K Lưỡi', 'K Manh tràng', 'K Máu', 'K Mũi', 'K Não', 'K Phổi', 'K Ruột', 'K Tá tràng', 'K Thận', 'K Thanh quản', 'K Thực quản', 'K Tinh hoàn', 'K Trực tràng', 'K Tuyến giáp', 'K Tuyến mang tai', 'K Tuyến tiền liệt', 'K Vòm họng', 'K Võng mạc', 'K Vú', 'K Xoang hàm', 'K Xương', 'K Túi mật', 'K âm hộ', 'K hậu môn', 'K tuyến ức', 'K khâủ cái', 'K phúc mạc', 'K nướu hàm dưới', 'K hỗng tràng', 'K đường mật', 'K mô liên kết Đầu-mặt-cổ', 'K màng phổi', 'K thanh môn', 'k niệu quản', 'K khác'
+];
