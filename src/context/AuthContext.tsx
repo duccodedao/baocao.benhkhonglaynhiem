@@ -1,6 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserProfile } from '../types';
-import { getUsersList, saveUsersList, getPreviewMode, setPreviewMode as savePreviewModeState } from '../services/storage';
+import {
+  getUsersList,
+  saveUsersList,
+  getPreviewConfig,
+  setPreviewConfig as savePreviewConfigState,
+  addAuditLog,
+  PreviewConfig
+} from '../services/storage';
 import { auth, loginWithFirebaseGoogle, logoutFirebase } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
@@ -9,12 +16,14 @@ interface AuthContextType {
   accessDeniedEmail: string | null;
   loadingAuth: boolean;
   previewMode: boolean;
+  previewConfig: PreviewConfig;
   loginWithGooglePopup: () => Promise<void>;
-  loginWithPassword: (email: string, pass: string) => { success: boolean; message?: string };
-  setupAccount: (data: { email: string; password?: string; displayName: string; position?: string; unitName?: string }) => void;
+  loginWithGoogleEmail: (email: string, displayName?: string) => void;
+  loginWithPasscode: (passcode: string) => { success: boolean; message?: string };
   logout: () => void;
   clearAccessDenied: () => void;
   togglePreviewMode: (enabled: boolean) => void;
+  updatePreviewConfig: (config: Partial<PreviewConfig>) => void;
   enterPreviewAsGuest: () => void;
   requestAppPermissions: () => void;
 }
@@ -22,7 +31,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [previewMode, setPreviewModeState] = useState<boolean>(() => getPreviewMode());
+  const [previewConfig, setPreviewConfigState] = useState<PreviewConfig>(() => getPreviewConfig());
+  const previewMode = previewConfig.enabled;
   
   const [user, setUser] = useState<UserProfile | null>(() => {
     try {
@@ -109,6 +119,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setUser(updatedUser);
       setAccessDeniedEmail(null);
+
+      // Record Login Audit Log
+      const device = navigator.userAgent.includes('Mobile') ? 'Thiết bị Di động (Mobile)' : 'Máy tính / Trình duyệt Desktop';
+      addAuditLog({
+        action: 'LOGIN',
+        targetType: 'USER',
+        targetId: updatedUser.uid,
+        description: `Đăng nhập hệ thống (Google Auth)`,
+        userEmail: updatedUser.email,
+        userName: updatedUser.displayName,
+        ipAddress: '127.0.0.1 (Kế thừa Trạm Y tế)',
+        deviceInfo: device
+      });
     } else if (isSuperAdmin) {
       // Super Admin is always auto-granted ADMIN access
       const adminProfile: UserProfile = {
@@ -158,77 +181,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const loginWithPassword = (email: string, pass: string) => {
-    requestAppPermissions();
-    const cleanEmail = email.toLowerCase().trim();
-    const existingUsers = getUsersList();
-
-    // Check superadmin bypass or matched user with password
-    const isSuperAdmin = cleanEmail === 'sonlyhongduc@gmail.com';
-    const matched = existingUsers.find(u => u.email.toLowerCase() === cleanEmail);
-
-    if (matched) {
-      if (matched.password && matched.password !== pass) {
-        return { success: false, message: 'Mật khẩu đăng nhập không chính xác!' };
-      }
-      if (!matched.active && !isSuperAdmin) {
-        setAccessDeniedEmail(cleanEmail);
-        setUser(null);
-        return { success: false, message: 'Tài khoản chưa được duyệt phân quyền!' };
-      }
-      const loggedUser: UserProfile = {
-        ...matched,
-        lastLoginAt: new Date().toISOString()
-      };
-      setUser(loggedUser);
-      setAccessDeniedEmail(null);
-      return { success: true };
-    } else if (isSuperAdmin) {
-      const adminProfile: UserProfile = {
-        uid: 'u_admin_sonlyhongduc',
-        email: 'sonlyhongduc@gmail.com',
-        displayName: 'ThS.BS. Sơn Lý Hồng Đức (Trưởng trạm / Admin)',
-        role: 'ADMIN',
-        unitName: 'Trạm Y tế phường Hiệp Thành',
-        active: true,
-        createdAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString()
-      };
-      setUser(adminProfile);
-      setAccessDeniedEmail(null);
-      return { success: true };
-    } else {
-      setAccessDeniedEmail(cleanEmail);
-      setUser(null);
-      return { success: false, message: 'Tài khoản chưa đăng ký hoặc chưa phân quyền truy cập!' };
-    }
+  const loginWithGoogleEmail = (email: string, displayName?: string) => {
+    verifyAndAuthenticateUser(email, displayName);
   };
 
-  const setupAccount = (data: { email: string; password?: string; displayName: string; position?: string; unitName?: string }) => {
-    const cleanEmail = data.email.toLowerCase().trim();
-    const existingUsers = getUsersList();
-    const existingIndex = existingUsers.findIndex(u => u.email.toLowerCase() === cleanEmail);
-
-    const newUser: UserProfile = {
-      uid: existingIndex >= 0 ? existingUsers[existingIndex].uid : `u_usr_${Date.now()}`,
-      email: cleanEmail,
-      displayName: data.displayName.trim(),
-      password: data.password || '123456',
-      role: 'STAFF',
-      position: data.position || 'Cán bộ Y tế',
-      unitName: data.unitName || 'Trạm Y tế phường Hiệp Thành',
-      active: false, // Wait for Admin approval
-      createdAt: new Date().toISOString()
-    };
-
-    if (existingIndex >= 0) {
-      existingUsers[existingIndex] = newUser;
-    } else {
-      existingUsers.push(newUser);
+  const loginWithPasscode = (inputPasscode: string): { success: boolean; message?: string } => {
+    if (!previewConfig.enabled) {
+      return { success: false, message: 'Chế độ xem Báo cáo (Preview) hiện đang TẮT!' };
     }
-    saveUsersList(existingUsers);
-
-    setAccessDeniedEmail(cleanEmail);
+    if (previewConfig.requirePasscode && inputPasscode.trim() !== previewConfig.passcode) {
+      return { success: false, message: 'Mã Passcode không chính xác!' };
+    }
+    enterPreviewAsGuest();
+    return { success: true };
   };
 
   const logout = async () => {
@@ -246,8 +211,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const togglePreviewMode = (enabled: boolean) => {
-    setPreviewModeState(enabled);
-    savePreviewModeState(enabled, user ? { email: user.email, name: user.displayName } : undefined);
+    const updated = savePreviewConfigState({ enabled }, user ? { email: user.email, name: user.displayName } : undefined);
+    setPreviewConfigState(updated);
+  };
+
+  const updatePreviewConfig = (config: Partial<PreviewConfig>) => {
+    const updated = savePreviewConfigState(config, user ? { email: user.email, name: user.displayName } : undefined);
+    setPreviewConfigState(updated);
   };
 
   const enterPreviewAsGuest = () => {
@@ -270,12 +240,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         accessDeniedEmail,
         loadingAuth,
         previewMode,
+        previewConfig,
         loginWithGooglePopup,
-        loginWithPassword,
-        setupAccount,
+        loginWithGoogleEmail,
+        loginWithPasscode,
         logout,
         clearAccessDenied,
         togglePreviewMode,
+        updatePreviewConfig,
         enterPreviewAsGuest,
         requestAppPermissions
       }}

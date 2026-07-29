@@ -21,7 +21,11 @@ import {
   Pill,
   Search,
   Download,
-  FileUp
+  FileUp,
+  Info,
+  AlertCircle,
+  X,
+  ExternalLink
 } from 'lucide-react';
 import { CancerImportModal } from './CancerImportModal';
 import { CANCER_TYPES } from '../constants/cancerTypes';
@@ -355,6 +359,7 @@ interface NumInputProps {
   onChange: (val: string) => void;
   disabled?: boolean;
   highlight?: boolean;
+  mismatch?: boolean;
   align?: 'right' | 'center' | 'left';
 }
 
@@ -363,6 +368,7 @@ const NumInput: React.FC<NumInputProps> = ({
   onChange,
   disabled,
   highlight,
+  mismatch,
   align = 'right'
 }) => {
   const { user } = useAuth();
@@ -377,7 +383,9 @@ const NumInput: React.FC<NumInputProps> = ({
       onChange={e => onChange(e.target.value)}
       disabled={isReadOnly}
       className={`w-full ${align === 'center' ? 'text-center' : align === 'left' ? 'text-left' : 'text-right'} px-2 py-1.5 rounded-lg ${
-        highlight
+        mismatch
+          ? 'bg-amber-100 dark:bg-amber-950/90 text-amber-950 dark:text-amber-100 font-extrabold border-2 border-amber-500 dark:border-amber-400 ring-2 ring-amber-400/50'
+          : highlight
           ? 'bg-rose-50/90 dark:bg-rose-950/40 text-rose-800 dark:text-rose-200 font-bold border-rose-300 dark:border-rose-800'
           : 'bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white font-semibold border-slate-200 dark:border-slate-700'
       } text-xs border hover:border-slate-400 dark:hover:border-slate-500 focus:bg-white focus:dark:bg-slate-900 focus:ring-2 focus:ring-rose-500 focus:border-rose-500 transition-all outline-none print:border-none print:bg-transparent print:p-0 print:shadow-none print:font-semibold print:text-slate-900 disabled:opacity-75 disabled:cursor-not-allowed`}
@@ -400,7 +408,7 @@ const CompSelect: React.FC<CompSelectProps> = ({ value, onChange, disabled }) =>
       value={value || 'Không'}
       onChange={e => onChange(e.target.value)}
       disabled={isReadOnly}
-      className={`w-full text-center px-1.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+      className={`w-full text-center appearance-none px-1 py-1.5 rounded-lg text-xs font-black border transition-all cursor-pointer ${
         value === 'Tăng +'
           ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800'
           : value === 'Giảm -'
@@ -473,16 +481,23 @@ const UnimplementedReportPlaceholder: React.FC<UnimplementedReportPlaceholderPro
 
 export interface OfficialMonthlyReportProps {
   defaultTab?: 'all' | 'tha' | 'dtd' | 'cancer' | 'iod' | 'copd' | 'asthma' | 'tt23';
+  defaultViewMode?: ReportViewMode;
 }
 
-export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ defaultTab = 'all' }) => {
+export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ defaultTab = 'all', defaultViewMode = 'MONTHLY' }) => {
   const { user } = useAuth();
   const { reports } = useReports();
   const { showToast, confirmModal } = useToast();
   const unitConfig = getUnitConfig();
 
   const now = new Date();
-  const [viewMode, setViewMode] = useState<ReportViewMode>('MONTHLY');
+  const [viewMode, setViewMode] = useState<ReportViewMode>(defaultViewMode);
+
+  useEffect(() => {
+    if (defaultViewMode) {
+      setViewMode(defaultViewMode);
+    }
+  }, [defaultViewMode]);
   const [month, setMonth] = useState<number>(now.getMonth() + 1);
   const [year, setYear] = useState<number>(now.getFullYear());
 
@@ -500,8 +515,8 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
   const [loadingFirebase, setLoadingFirebase] = useState<boolean>(true);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'idle'>('saved');
   const [cancerSearch, setCancerSearch] = useState("");
-  const [cancerViewType, setCancerViewType] = useState<'table' | 'cards'>('cards');
   const [showCancerImportModal, setShowCancerImportModal] = useState(false);
+  const [selectedNoteType, setSelectedNoteType] = useState<string | null>(null);
   const [activeReportTab, setActiveReportTab] = useState<'all' | 'tha' | 'dtd' | 'cancer' | 'iod' | 'copd' | 'asthma' | 'tt23'>('all');
 
   useEffect(() => {
@@ -563,14 +578,15 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
     base.id = targetId;
 
     const sumField = (sec: 'tha' | 'dtd' | 'cancer' | 'iod', field: string, arr: OfficialNcdData[]) =>
-      arr.reduce((acc, curr) => acc + ((curr[sec] as any)?.[field] || 0), 0);
+      arr.reduce((acc, curr) => acc + (Number((curr[sec] as any)?.[field]) || 0), 0);
 
     const lastValue = (sec: 'tha' | 'dtd' | 'cancer' | 'iod', field: string, arr: OfficialNcdData[]) => {
+      if (!arr || arr.length === 0) return 0;
       for (let i = arr.length - 1; i >= 0; i--) {
         const val = (arr[i][sec] as any)?.[field];
-        if (val !== undefined && val !== null && val > 0) return val;
+        if (val !== undefined && val !== null && val !== '') return Number(val) || 0;
       }
-      return arr.length > 0 ? (arr[arr.length - 1][sec] as any)?.[field] || 0 : 0;
+      return 0;
     };
 
     const compText = (cur: number, prev: number) => {
@@ -677,19 +693,29 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
       let macSum = 0;
       let chetSum = 0;
       let ngungSum = 0;
-      let lastMacTichLuy = 0;
-      let lastChetTichLuy = 0;
-      let lastQuanLy = 0;
 
       for (const r of monthsReports) {
         if (r.cancerDetails && r.cancerDetails[type]) {
           const d = r.cancerDetails[type];
-          macSum += d.mac || 0;
-          chetSum += d.chet || 0;
-          ngungSum += d.ngungDieuTri || 0;
-          if (d.macTichLuy) lastMacTichLuy = d.macTichLuy;
-          if (d.chetTichLuy) lastChetTichLuy = d.chetTichLuy;
-          if (d.quanLyHienTai) lastQuanLy = d.quanLyHienTai;
+          macSum += Number(d.mac) || 0;
+          chetSum += Number(d.chet) || 0;
+          ngungSum += Number(d.ngungDieuTri) || 0;
+        }
+      }
+
+      // Cumulative / Snapshot fields are taken directly from the last month of the period
+      let lastMacTichLuy = 0;
+      let lastChetTichLuy = 0;
+      let lastQuanLy = 0;
+      let lastNote = '';
+
+      for (let i = monthsReports.length - 1; i >= 0; i--) {
+        const d = monthsReports[i]?.cancerDetails?.[type];
+        if (d) {
+          if (lastMacTichLuy === 0 && d.macTichLuy !== undefined && d.macTichLuy !== null) lastMacTichLuy = Number(d.macTichLuy) || 0;
+          if (lastChetTichLuy === 0 && d.chetTichLuy !== undefined && d.chetTichLuy !== null) lastChetTichLuy = Number(d.chetTichLuy) || 0;
+          if (lastQuanLy === 0 && d.quanLyHienTai !== undefined && d.quanLyHienTai !== null) lastQuanLy = Number(d.quanLyHienTai) || 0;
+          if (!lastNote && d.note) lastNote = d.note;
         }
       }
 
@@ -700,7 +726,7 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
         chetTichLuy: lastChetTichLuy,
         ngungDieuTri: ngungSum,
         quanLyHienTai: lastQuanLy,
-        note: ''
+        note: lastNote
       };
     });
     base.cancerDetails = aggCancerDetails;
@@ -1063,44 +1089,51 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
     k4_totalEquip: 12, k4_goodEquip: 9, k4_totalEquip_prevYear: 11, k4_totalEquip_comp: 'Không',
   };
 
+  // Warning logic for Requirement 2: "Chưa nhập ngay" & Mismatch checks
+  const annexMacSum = CANCER_TYPES.reduce((acc, t) => acc + (Number(reportData.cancerDetails?.[t]?.mac) || 0), 0);
+  const annexChetSum = CANCER_TYPES.reduce((acc, t) => acc + (Number(reportData.cancerDetails?.[t]?.chet) || 0), 0);
+  const annexNgungSum = CANCER_TYPES.reduce((acc, t) => acc + (Number(reportData.cancerDetails?.[t]?.ngungDieuTri) || 0), 0);
+  const annexQuanLySum = CANCER_TYPES.reduce((acc, t) => acc + (Number(reportData.cancerDetails?.[t]?.quanLyHienTai) || 0), 0);
+
+  const mainMac = reportData.cancer?.m1_newCase || 0;
+  const mainChet = reportData.cancer?.m3_death || 0;
+  const mainNgung = reportData.cancer?.m4_stopTreat || 0;
+  const mainQuanLy = reportData.cancer?.m5_currentManaged || 0;
+
+  const isDiffMac = mainMac !== annexMacSum;
+  const isDiffChet = mainChet !== annexChetSum;
+  const isDiffNgung = mainNgung !== annexNgungSum;
+  const isDiffQuanLy = mainQuanLy !== annexQuanLySum;
+
+  const totalAnnexCases = annexMacSum + annexChetSum + annexNgungSum + annexQuanLySum;
+  const hasAnnexData = totalAnnexCases > 0 || CANCER_TYPES.some(type => (reportData.cancerDetails?.[type]?.note || '').trim() !== '');
+
+  const totalMainCancerCases = mainMac + mainChet + mainNgung + mainQuanLy;
+  const hasMainCancerData = totalMainCancerCases > 0;
+
+  // Annex entered BUT main report section is empty or unpopulated
+  const isMissingMainReportWarning = hasAnnexData && (!hasMainCancerData || !reportData.lastSavedAt);
+
+  // Main report entered BUT Annex is empty
+  const isMissingAnnexWarning = hasMainCancerData && !hasAnnexData;
+
+  // Exact mismatch warning requested by user
+  const hasMismatchWarning = (isDiffMac || isDiffChet || isDiffNgung || isDiffQuanLy) && (hasMainCancerData || hasAnnexData);
+
   return (
     <div className="space-y-6 pb-16">
       {/* View Mode Selector Tabs (Hidden on Print) */}
       <div className="print:hidden bg-white dark:bg-slate-900 p-2 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-center gap-2">
         <button
-          onClick={() => setViewMode('MONTHLY')}
-          className={`w-full sm:flex-1 py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
-            viewMode === 'MONTHLY'
-              ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <Calendar className="w-4 h-4" />
-          <span>Báo cáo Theo Tháng</span>
-        </button>
-
-        <button
-          onClick={() => setViewMode('QUARTERLY')}
-          className={`w-full sm:flex-1 py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
-            viewMode === 'QUARTERLY'
-              ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <Layers className="w-4 h-4" />
-          <span>Báo cáo Theo Quý</span>
-        </button>
-
-        <button
-          onClick={() => setViewMode('CUSTOM_RANGE')}
-          className={`w-full sm:flex-1 py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+          onClick={() => setViewMode(prev => prev === 'CUSTOM_RANGE' ? defaultViewMode : 'CUSTOM_RANGE')}
+          className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all ${
             viewMode === 'CUSTOM_RANGE'
               ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
           <CalendarDays className="w-4 h-4" />
-          <span>Từ tháng đến tháng (Không cộng dồn)</span>
+          <span>{viewMode === 'CUSTOM_RANGE' ? 'Quay lại chế độ xem chuẩn' : 'Chế độ: Từ tháng đến tháng (Không cộng dồn)'}</span>
         </button>
       </div>
 
@@ -1277,6 +1310,216 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
         </div>
       )}
 
+      {/* Mismatch Warning Banner for Requirement 2 */}
+      {viewMode === 'MONTHLY' && hasMismatchWarning && (
+        <div className="print:hidden bg-amber-50 dark:bg-amber-950/80 border-2 border-amber-500 dark:border-amber-600 p-4 rounded-2xl space-y-3 shadow-xl animate-in fade-in duration-300">
+          <div className="flex items-center gap-2.5 pb-2 border-b border-amber-200 dark:border-amber-800/80">
+            <div className="p-2 rounded-xl bg-amber-500 text-white shrink-0 shadow-sm">
+              <AlertCircle className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <h4 className="text-sm font-extrabold text-amber-950 dark:text-amber-100">
+                Cảnh báo: Phát hiện chênh lệch số liệu giữa Báo cáo chính và Phụ lục Ung thư (Tháng {month}/{year})
+              </h4>
+              <p className="text-xs text-amber-800 dark:text-amber-300">
+                Vui lòng bấm nút di chuyển để kiểm tra và điều chỉnh ô số liệu chưa khớp bên dưới.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {isDiffMac && (
+              <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border-2 border-amber-400 dark:border-amber-700 shadow-sm space-y-2">
+                <div className="flex items-center gap-2 text-amber-950 dark:text-amber-100 font-extrabold text-xs">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Cảnh báo: Lệch số bệnh nhân phát hiện mới trong kỳ</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-amber-50/90 dark:bg-amber-950/50 text-xs text-amber-950 dark:text-amber-100 font-semibold flex items-center justify-between gap-2 border border-amber-200 dark:border-amber-800">
+                  <span>Số Báo cáo chính: <strong className="text-rose-700 dark:text-rose-300 font-black">{mainMac} ca</strong></span>
+                  <span className="text-amber-600 font-bold">và</span>
+                  <span>Số Phụ lục Ung thư: <strong className="text-rose-700 dark:text-rose-300 font-black">{annexMacSum} ca</strong></span>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-1 flex-wrap">
+                  <button
+                    onClick={() => {
+                      setActiveReportTab('all');
+                      setTimeout(() => {
+                        document.getElementById('main-cancer-m1')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 100);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/60 dark:hover:bg-amber-900 text-amber-950 dark:text-amber-100 font-bold text-xs transition-all flex items-center gap-1.5 border border-amber-300 dark:border-amber-700 shadow-xs"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Di chuyển đến ô Báo cáo chính</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveReportTab('cancer');
+                      setTimeout(() => {
+                        document.getElementById('cancer-annex-table')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 100);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Di chuyển đến Phụ lục</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {isDiffChet && (
+              <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border-2 border-amber-400 dark:border-amber-700 shadow-sm space-y-2">
+                <div className="flex items-center gap-2 text-amber-950 dark:text-amber-100 font-extrabold text-xs">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Cảnh báo: Lệch số ca tử vong do Ung thư</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-amber-50/90 dark:bg-amber-950/50 text-xs text-amber-950 dark:text-amber-100 font-semibold flex items-center justify-between gap-2 border border-amber-200 dark:border-amber-800">
+                  <span>Số Báo cáo chính: <strong className="text-rose-700 dark:text-rose-300 font-black">{mainChet} ca</strong></span>
+                  <span className="text-amber-600 font-bold">và</span>
+                  <span>Số Phụ lục Ung thư: <strong className="text-rose-700 dark:text-rose-300 font-black">{annexChetSum} ca</strong></span>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-1 flex-wrap">
+                  <button
+                    onClick={() => {
+                      setActiveReportTab('all');
+                      setTimeout(() => {
+                        document.getElementById('main-cancer-m3')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 100);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/60 dark:hover:bg-amber-900 text-amber-950 dark:text-amber-100 font-bold text-xs transition-all flex items-center gap-1.5 border border-amber-300 dark:border-amber-700 shadow-xs"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Di chuyển đến ô Báo cáo chính</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveReportTab('cancer');
+                      setTimeout(() => {
+                        document.getElementById('cancer-annex-table')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 100);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Di chuyển đến Phụ lục</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {isDiffNgung && (
+              <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border-2 border-amber-400 dark:border-amber-700 shadow-sm space-y-2">
+                <div className="flex items-center gap-2 text-amber-950 dark:text-amber-100 font-extrabold text-xs">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Cảnh báo: Lệch số ca không tiếp tục điều trị</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-amber-50/90 dark:bg-amber-950/50 text-xs text-amber-950 dark:text-amber-100 font-semibold flex items-center justify-between gap-2 border border-amber-200 dark:border-amber-800">
+                  <span>Số Báo cáo chính: <strong className="text-rose-700 dark:text-rose-300 font-black">{mainNgung} ca</strong></span>
+                  <span className="text-amber-600 font-bold">và</span>
+                  <span>Số Phụ lục Ung thư: <strong className="text-rose-700 dark:text-rose-300 font-black">{annexNgungSum} ca</strong></span>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-1 flex-wrap">
+                  <button
+                    onClick={() => {
+                      setActiveReportTab('all');
+                      setTimeout(() => {
+                        document.getElementById('main-cancer-m4')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 100);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/60 dark:hover:bg-amber-900 text-amber-950 dark:text-amber-100 font-bold text-xs transition-all flex items-center gap-1.5 border border-amber-300 dark:border-amber-700 shadow-xs"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Di chuyển đến ô Báo cáo chính</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveReportTab('cancer');
+                      setTimeout(() => {
+                        document.getElementById('cancer-annex-table')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 100);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Di chuyển đến Phụ lục</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {isDiffQuanLy && (
+              <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border-2 border-amber-400 dark:border-amber-700 shadow-sm space-y-2">
+                <div className="flex items-center gap-2 text-amber-950 dark:text-amber-100 font-extrabold text-xs">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Cảnh báo: Lệch tổng số bệnh nhân quản lý hiện tại</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-amber-50/90 dark:bg-amber-950/50 text-xs text-amber-950 dark:text-amber-100 font-semibold flex items-center justify-between gap-2 border border-amber-200 dark:border-amber-800">
+                  <span>Số Báo cáo chính: <strong className="text-rose-700 dark:text-rose-300 font-black">{mainQuanLy} ca</strong></span>
+                  <span className="text-amber-600 font-bold">và</span>
+                  <span>Số Phụ lục Ung thư: <strong className="text-rose-700 dark:text-rose-300 font-black">{annexQuanLySum} ca</strong></span>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-1 flex-wrap">
+                  <button
+                    onClick={() => {
+                      setActiveReportTab('all');
+                      setTimeout(() => {
+                        document.getElementById('main-cancer-m5')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 100);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/60 dark:hover:bg-amber-900 text-amber-950 dark:text-amber-100 font-bold text-xs transition-all flex items-center gap-1.5 border border-amber-300 dark:border-amber-700 shadow-xs"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Di chuyển đến ô Báo cáo chính</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActiveReportTab('cancer');
+                      setTimeout(() => {
+                        document.getElementById('cancer-annex-table')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 100);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Di chuyển đến Phụ lục</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {viewMode === 'MONTHLY' && isMissingAnnexWarning && (
+        <div className="print:hidden bg-rose-50 dark:bg-rose-950/60 border-2 border-rose-400 dark:border-rose-700 p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md animate-in fade-in duration-300">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-rose-600 text-white shrink-0 mt-0.5 sm:mt-0 shadow-sm">
+              <AlertCircle className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-rose-600 text-white uppercase tracking-wider animate-pulse shadow-sm">
+                  Chưa nhập ngay
+                </span>
+                <h4 className="text-xs sm:text-sm font-bold text-rose-900 dark:text-rose-200">
+                  Cảnh báo: Báo cáo chính Tháng {month}/{year} có số liệu Ung thư nhưng CHƯA NHẬP Phụ lục!
+                </h4>
+              </div>
+              <p className="text-xs text-rose-800 dark:text-rose-300 mt-1 leading-relaxed">
+                Báo cáo chính ghi nhận {totalMainCancerCases} ca Ung thư, nhưng danh sách Phụ lục chi tiết theo từng loại bệnh chưa được nhập.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setActiveReportTab('cancer')}
+            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shrink-0 shadow-md shadow-rose-600/30 transition-all text-center"
+          >
+            Mở Phụ lục nhập ngay
+          </button>
+        </div>
+      )}
+
       {/* Main Section Header Card */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -1295,6 +1538,30 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
           </div>
         </div>
       </div>
+
+      {/* Cumulative Rules Info Banner for Quarterly/Range Mode */}
+      {viewMode === 'QUARTERLY' && (
+        <div className="bg-amber-50 dark:bg-amber-950/40 p-3.5 rounded-2xl border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5 shadow-sm">
+          <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <strong className="font-bold text-amber-950 dark:text-amber-100">Quy tắc số liệu cộng dồn Quý ({quarterChoice}/{year}):</strong>
+            <p className="mt-0.5 leading-relaxed text-[11px] text-amber-800 dark:text-amber-300">
+              Số liệu phát sinh trong kỳ được tính tổng 3 tháng. Các cột <strong>"Cộng dồn"</strong> (lũy kế, số bệnh nhân đang quản lý) được chốt tự động từ tháng cuối cùng của Quý (<strong>Tháng {quarterChoice === 'Q1' ? '03' : quarterChoice === 'Q2' ? '06' : quarterChoice === 'Q3' ? '09' : '12'}/{year}</strong>), không cộng dồn chồng lấp giữa các tháng.
+            </p>
+          </div>
+        </div>
+      )}
+      {viewMode === 'CUSTOM_RANGE' && (
+        <div className="bg-amber-50 dark:bg-amber-950/40 p-3.5 rounded-2xl border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5 shadow-sm">
+          <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <strong className="font-bold text-amber-950 dark:text-amber-100">Ghi chú số liệu cộng dồn giai đoạn:</strong>
+            <p className="mt-0.5 leading-relaxed text-[11px] text-amber-800 dark:text-amber-300">
+              Số liệu cộng dồn được chốt theo dữ liệu snapshot của tháng cuối cùng trong kỳ chọn (<strong>Tháng {toMonth.toString().padStart(2, '0')}/{toYear}</strong>).
+            </p>
+          </div>
+        </div>
+      )}
 
       {activeReportTab === 'copd' && (
         <UnimplementedReportPlaceholder
@@ -1322,7 +1589,7 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
           </h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+          <table className="w-full text-left text-xs border-collapse min-w-[800px]">
             <thead className="bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-bold border-b border-slate-200 dark:border-slate-700">
               <tr>
                 <th className="py-2.5 px-3 text-center w-12 border-r border-slate-200 dark:border-slate-700">TT</th>
@@ -1330,7 +1597,19 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
                 <th className="py-2.5 px-3 text-right w-28 border-r border-slate-200 dark:border-slate-700">
                   {viewMode === 'MONTHLY' ? `Tháng ${month}/${year}` : `Trong Quý (${quarterChoice})`}
                 </th>
-                <th className="py-2.5 px-3 text-right w-24 border-r border-slate-200 dark:border-slate-700">Cộng dồn</th>
+                <th className="py-2.5 px-3 text-right min-w-[110px] border-r border-slate-200 dark:border-slate-700">
+                  <div>Cộng dồn</div>
+                  {viewMode === 'QUARTERLY' && (
+                    <div className="text-[10px] font-normal text-amber-700 dark:text-amber-300">
+                      (Đến T{quarterChoice === 'Q1' ? '03' : quarterChoice === 'Q2' ? '06' : quarterChoice === 'Q3' ? '09' : '12'}/{year})
+                    </div>
+                  )}
+                  {viewMode === 'CUSTOM_RANGE' && (
+                    <div className="text-[10px] font-normal text-amber-700 dark:text-amber-300">
+                      (Đến T{toMonth.toString().padStart(2, '0')}/{toYear})
+                    </div>
+                  )}
+                </th>
                 <th className="py-2.5 px-3 text-right w-28 border-r border-slate-200 dark:border-slate-700">
                   {viewMode === 'MONTHLY' ? `Tháng ${month}/${year - 1}` : `Cùng kỳ năm trước`}
                 </th>
@@ -1525,7 +1804,7 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
           </h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+          <table className="w-full text-left text-xs border-collapse min-w-[800px]">
             <thead className="bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-bold border-b border-slate-200 dark:border-slate-700">
               <tr>
                 <th className="py-2.5 px-3 text-center w-12 border-r border-slate-200 dark:border-slate-700">TT</th>
@@ -1533,7 +1812,19 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
                 <th className="py-2.5 px-3 text-right w-28 border-r border-slate-200 dark:border-slate-700">
                   {viewMode === 'MONTHLY' ? `Tháng ${month}/${year}` : `Trong Quý (${quarterChoice})`}
                 </th>
-                <th className="py-2.5 px-3 text-right w-24 border-r border-slate-200 dark:border-slate-700">Cộng dồn</th>
+                <th className="py-2.5 px-3 text-right min-w-[110px] border-r border-slate-200 dark:border-slate-700">
+                  <div>Cộng dồn</div>
+                  {viewMode === 'QUARTERLY' && (
+                    <div className="text-[10px] font-normal text-amber-700 dark:text-amber-300">
+                      (Đến T{quarterChoice === 'Q1' ? '03' : quarterChoice === 'Q2' ? '06' : quarterChoice === 'Q3' ? '09' : '12'}/{year})
+                    </div>
+                  )}
+                  {viewMode === 'CUSTOM_RANGE' && (
+                    <div className="text-[10px] font-normal text-amber-700 dark:text-amber-300">
+                      (Đến T{toMonth.toString().padStart(2, '0')}/{toYear})
+                    </div>
+                  )}
+                </th>
                 <th className="py-2.5 px-3 text-right w-28 border-r border-slate-200 dark:border-slate-700">
                   {viewMode === 'MONTHLY' ? `Tháng ${month}/${year - 1}` : `Cùng kỳ năm trước`}
                 </th>
@@ -1778,97 +2069,14 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
       <div className={`bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden ${
         activeReportTab === 'all' || activeReportTab === 'cancer' || activeReportTab === 'tt23' ? 'block' : 'hidden print:block'
       }`}>
-        {/* Header & Quarterly / Monthly Control Banner */}
-        <div className="p-4 bg-purple-50 dark:bg-purple-950/40 border-b border-purple-200 dark:border-purple-800/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-1 rounded-lg bg-purple-600 text-white font-bold text-xs shadow-sm">
-                {viewMode === 'QUARTERLY' ? `QUÝ ${quarterChoice}/${year}` : `THÁNG ${month.toString().padStart(2, '0')}/${year}`}
-              </span>
-              <h3 className="text-xs sm:text-sm font-extrabold text-purple-950 dark:text-purple-100 uppercase tracking-wider">
-                8. PHÒNG, CHỐNG UNG THƯ
-              </h3>
-            </div>
-            <p className="text-[11px] text-purple-800 dark:text-purple-300 mt-1">
-              {viewMode === 'QUARTERLY'
-                ? `Tự động tổng hợp số liệu 3 tháng của Quý ${quarterChoice} (${getQuarterMonths('STANDARD', quarterChoice, year).map(s => `T${s.m.toString().padStart(2, '0')}`).join(', ')}) năm ${year}`
-                : `Dữ liệu báo cáo chuyên đề Ung thư Tháng ${month}/${year}`}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto">
-            <button
-              onClick={() => setViewMode('MONTHLY')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                viewMode === 'MONTHLY'
-                  ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30'
-                  : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              Theo Tháng
-            </button>
-            <div className="h-4 w-px bg-purple-300 dark:bg-purple-800 mx-0.5 hidden sm:block" />
-            <span className="text-[11px] font-bold text-purple-700 dark:text-purple-300 mr-1 sm:inline hidden">Chọn Quý:</span>
-            {['Q1', 'Q2', 'Q3', 'Q4'].map(q => (
-              <button
-                key={q}
-                onClick={() => {
-                  setViewMode('QUARTERLY');
-                  setQuarterChoice(q);
-                }}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                  viewMode === 'QUARTERLY' && quarterChoice === q
-                    ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-purple-50'
-                }`}
-              >
-                {q}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Visual Stat Overview Cards for Mobile & Desktop */}
-        <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 bg-purple-50/30 dark:bg-purple-950/20 border-b border-purple-100 dark:border-purple-900/40">
-          <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-rose-200 dark:border-rose-900/50 shadow-sm">
-            <div className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">1. Mắc mới</div>
-            <div className="text-base sm:text-lg font-black text-rose-600 dark:text-rose-400 mt-0.5">
-              {(reportData.cancer?.m1_newCase || 0).toLocaleString('vi-VN')}
-            </div>
-            <div className="text-[10px] text-slate-500 dark:text-slate-400">Cộng dồn: {(reportData.cancer?.m1_newCase_cum || 0).toLocaleString('vi-VN')}</div>
-          </div>
-          <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-blue-200 dark:border-blue-900/50 shadow-sm">
-            <div className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">2. Tái trị</div>
-            <div className="text-base sm:text-lg font-black text-slate-900 dark:text-white mt-0.5">
-              {(reportData.cancer?.m2_reTreat || 0).toLocaleString('vi-VN')}
-            </div>
-            <div className="text-[10px] text-slate-500 dark:text-slate-400">Cộng dồn: {(reportData.cancer?.m2_reTreat_cum || 0).toLocaleString('vi-VN')}</div>
-          </div>
-          <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-amber-200 dark:border-amber-900/50 shadow-sm">
-            <div className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">3. Tử vong</div>
-            <div className="text-base sm:text-lg font-black text-amber-600 dark:text-amber-400 mt-0.5">
-              {(reportData.cancer?.m3_death || 0).toLocaleString('vi-VN')}
-            </div>
-            <div className="text-[10px] text-slate-500 dark:text-slate-400">Cộng dồn: {(reportData.cancer?.m3_death_cum || 0).toLocaleString('vi-VN')}</div>
-          </div>
-          <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-            <div className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">4. Ngưng điều trị</div>
-            <div className="text-base sm:text-lg font-black text-slate-900 dark:text-white mt-0.5">
-              {(reportData.cancer?.m4_stopTreat || 0).toLocaleString('vi-VN')}
-            </div>
-            <div className="text-[10px] text-slate-500 dark:text-slate-400">Cộng dồn: {(reportData.cancer?.m4_stopTreat_cum || 0).toLocaleString('vi-VN')}</div>
-          </div>
-          <div className="col-span-2 sm:col-span-1 bg-gradient-to-br from-purple-600 to-indigo-700 text-white p-3 rounded-xl shadow-md">
-            <div className="text-[10px] font-bold text-purple-100 uppercase tracking-wider">5. Đang quản lý</div>
-            <div className="text-lg font-black mt-0.5">
-              {(reportData.cancer?.m5_currentManaged || 0).toLocaleString('vi-VN')}
-            </div>
-            <div className="text-[10px] text-purple-200">Tổng bệnh nhân</div>
-          </div>
+        <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+            8. PHÒNG, CHỐNG UNG THƯ
+          </h3>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+          <table className="w-full text-left text-xs border-collapse min-w-[800px]">
             <thead className="bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-bold border-b border-slate-200 dark:border-slate-700">
               <tr>
                 <th className="py-2.5 px-3 text-center w-12 border-r border-slate-200 dark:border-slate-700">TT</th>
@@ -1876,7 +2084,19 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
                 <th className="py-2.5 px-3 text-right w-28 border-r border-slate-200 dark:border-slate-700">
                   {viewMode === 'MONTHLY' ? `Tháng ${month}/${year}` : `Trong Quý (${quarterChoice})`}
                 </th>
-                <th className="py-2.5 px-3 text-right w-24 border-r border-slate-200 dark:border-slate-700">Cộng dồn</th>
+                <th className="py-2.5 px-3 text-right min-w-[110px] border-r border-slate-200 dark:border-slate-700">
+                  <div>Cộng dồn</div>
+                  {viewMode === 'QUARTERLY' && (
+                    <div className="text-[10px] font-normal text-amber-700 dark:text-amber-300">
+                      (Đến T{quarterChoice === 'Q1' ? '03' : quarterChoice === 'Q2' ? '06' : quarterChoice === 'Q3' ? '09' : '12'}/{year})
+                    </div>
+                  )}
+                  {viewMode === 'CUSTOM_RANGE' && (
+                    <div className="text-[10px] font-normal text-amber-700 dark:text-amber-300">
+                      (Đến T{toMonth.toString().padStart(2, '0')}/{toYear})
+                    </div>
+                  )}
+                </th>
                 <th className="py-2.5 px-3 text-right w-28 border-r border-slate-200 dark:border-slate-700">
                   {viewMode === 'MONTHLY' ? `Tháng ${month}/${year - 1}` : `Cùng kỳ năm trước`}
                 </th>
@@ -1885,14 +2105,25 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {/* 1 */}
-              <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                <td className="py-2 px-3 text-center font-semibold border-r border-slate-200 dark:border-slate-800">1</td>
-                <td className="py-2 px-3 border-r border-slate-200 dark:border-slate-800">Tổng số bệnh nhân Ung thư được phát hiện mới trong kỳ</td>
+              <tr id="main-cancer-m1" className={isDiffMac ? 'bg-amber-100/80 dark:bg-amber-950/60 border-2 border-amber-500 dark:border-amber-600 transition-colors' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors'}>
+                <td className={`py-2 px-3 text-center border-r border-slate-200 dark:border-slate-800 ${isDiffMac ? 'font-black text-amber-950 dark:text-amber-100' : 'font-semibold'}`}>1</td>
+                <td className={`py-2 px-3 border-r border-slate-200 dark:border-slate-800 ${isDiffMac ? 'bg-amber-100 dark:bg-amber-950/80 font-black text-amber-950 dark:text-amber-100' : ''}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Tổng số bệnh nhân Ung thư được phát hiện mới trong kỳ</span>
+                    {isDiffMac && (
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-600 text-white shadow-xs shrink-0 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        <span>Chưa khớp Phụ lục ({annexMacSum})</span>
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="py-1 px-2 border-r border-slate-200 dark:border-slate-800">
                   <NumInput
                     value={reportData.cancer.m1_newCase}
                     onChange={val => handleNestedChange('cancer', 'm1_newCase', val)}
-                    highlight
+                    mismatch={isDiffMac}
+                    highlight={!isDiffMac}
                   />
                 </td>
                 <td className="py-1 px-2 border-r border-slate-200 dark:border-slate-800">
@@ -1946,13 +2177,24 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
               </tr>
 
               {/* 3 */}
-              <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                <td className="py-2 px-3 text-center font-semibold border-r border-slate-200 dark:border-slate-800">3</td>
-                <td className="py-2 px-3 border-r border-slate-200 dark:border-slate-800">Số ca tử vong do Ung thư</td>
+              <tr id="main-cancer-m3" className={isDiffChet ? 'bg-amber-100/80 dark:bg-amber-950/60 border-2 border-amber-500 dark:border-amber-600 transition-colors' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors'}>
+                <td className={`py-2 px-3 text-center border-r border-slate-200 dark:border-slate-800 ${isDiffChet ? 'font-black text-amber-950 dark:text-amber-100' : 'font-semibold'}`}>3</td>
+                <td className={`py-2 px-3 border-r border-slate-200 dark:border-slate-800 ${isDiffChet ? 'bg-amber-100 dark:bg-amber-950/80 font-black text-amber-950 dark:text-amber-100' : ''}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Số ca tử vong do Ung thư</span>
+                    {isDiffChet && (
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-600 text-white shadow-xs shrink-0 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        <span>Chưa khớp Phụ lục ({annexChetSum})</span>
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="py-1 px-2 border-r border-slate-200 dark:border-slate-800">
                   <NumInput
                     value={reportData.cancer.m3_death}
                     onChange={val => handleNestedChange('cancer', 'm3_death', val)}
+                    mismatch={isDiffChet}
                   />
                 </td>
                 <td className="py-1 px-2 border-r border-slate-200 dark:border-slate-800">
@@ -1976,13 +2218,24 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
               </tr>
 
               {/* 4 */}
-              <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                <td className="py-2 px-3 text-center font-semibold border-r border-slate-200 dark:border-slate-800">4</td>
-                <td className="py-2 px-3 border-r border-slate-200 dark:border-slate-800">Số bệnh nhân Ung thư không tiếp tục tham gia điều trị</td>
+              <tr id="main-cancer-m4" className={isDiffNgung ? 'bg-amber-100/80 dark:bg-amber-950/60 border-2 border-amber-500 dark:border-amber-600 transition-colors' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors'}>
+                <td className={`py-2 px-3 text-center border-r border-slate-200 dark:border-slate-800 ${isDiffNgung ? 'font-black text-amber-950 dark:text-amber-100' : 'font-semibold'}`}>4</td>
+                <td className={`py-2 px-3 border-r border-slate-200 dark:border-slate-800 ${isDiffNgung ? 'bg-amber-100 dark:bg-amber-950/80 font-black text-amber-950 dark:text-amber-100' : ''}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Số bệnh nhân Ung thư không tiếp tục tham gia điều trị</span>
+                    {isDiffNgung && (
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-600 text-white shadow-xs shrink-0 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        <span>Chưa khớp Phụ lục ({annexNgungSum})</span>
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="py-1 px-2 border-r border-slate-200 dark:border-slate-800">
                   <NumInput
                     value={reportData.cancer.m4_stopTreat}
                     onChange={val => handleNestedChange('cancer', 'm4_stopTreat', val)}
+                    mismatch={isDiffNgung}
                   />
                 </td>
                 <td className="py-1 px-2 border-r border-slate-200 dark:border-slate-800">
@@ -2006,14 +2259,25 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
               </tr>
 
               {/* 5 */}
-              <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors bg-purple-50/40 dark:bg-purple-950/20">
-                <td className="py-2 px-3 text-center font-bold border-r border-slate-200 dark:border-slate-800 text-purple-900 dark:text-purple-300">5</td>
-                <td className="py-2 px-3 font-bold border-r border-slate-200 dark:border-slate-800 text-purple-900 dark:text-purple-300">Tổng số bệnh nhân Ung thư được quản lý hiện tại</td>
+              <tr id="main-cancer-m5" className={isDiffQuanLy ? 'bg-amber-100/80 dark:bg-amber-950/60 border-2 border-amber-500 dark:border-amber-600 transition-colors' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors bg-purple-50/40 dark:bg-purple-950/20'}>
+                <td className={`py-2 px-3 text-center border-r border-slate-200 dark:border-slate-800 ${isDiffQuanLy ? 'font-black text-amber-950 dark:text-amber-100' : 'font-bold text-purple-900 dark:text-purple-300'}`}>5</td>
+                <td className={`py-2 px-3 border-r border-slate-200 dark:border-slate-800 ${isDiffQuanLy ? 'bg-amber-100 dark:bg-amber-950/80 font-black text-amber-950 dark:text-amber-100' : 'font-bold text-purple-900 dark:text-purple-300'}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Tổng số bệnh nhân Ung thư được quản lý hiện tại</span>
+                    {isDiffQuanLy && (
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-600 text-white shadow-xs shrink-0 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        <span>Chưa khớp Phụ lục ({annexQuanLySum})</span>
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="py-1 px-2 border-r border-slate-200 dark:border-slate-800" colSpan={2}>
                   <NumInput
                     value={reportData.cancer.m5_currentManaged}
                     onChange={val => handleNestedChange('cancer', 'm5_currentManaged', val)}
-                    highlight
+                    mismatch={isDiffQuanLy}
+                    highlight={!isDiffQuanLy}
                     align="center"
                   />
                 </td>
@@ -2048,30 +2312,6 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Mobile View Mode Switcher Toggle */}
-              <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
-                <button
-                  onClick={() => setCancerViewType('cards')}
-                  className={`px-2.5 py-1 rounded-lg transition-all ${
-                    cancerViewType === 'cards'
-                      ? 'bg-rose-600 text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                  }`}
-                >
-                  📱 Thẻ Mobile
-                </button>
-                <button
-                  onClick={() => setCancerViewType('table')}
-                  className={`px-2.5 py-1 rounded-lg transition-all ${
-                    cancerViewType === 'table'
-                      ? 'bg-rose-600 text-white shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-                  }`}
-                >
-                  📊 Dạng Bảng
-                </button>
-              </div>
-
               <div className="relative flex-1 sm:w-48">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
@@ -2109,101 +2349,9 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
             </div>
           </div>
 
-          {/* Cards View Mode for Intuitive Mobile Rendering */}
-          {cancerViewType === 'cards' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 px-4 pb-4">
-              {CANCER_TYPES.filter(t => t.toLowerCase().includes(cancerSearch.toLowerCase())).map(type => {
-                const detail = reportData.cancerDetails?.[type] || { mac: 0, macTichLuy: 0, chet: 0, chetTichLuy: 0, ngungDieuTri: 0, quanLyHienTai: 0, note: '' };
-                return (
-                  <div key={type} className="bg-slate-50 dark:bg-slate-800/80 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3 shadow-sm hover:border-purple-300 dark:hover:border-purple-700 transition-all">
-                    <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-2">
-                      <span className="font-bold text-xs text-purple-900 dark:text-purple-200">{type}</span>
-                      <span className="px-2 py-0.5 rounded-md bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 text-[10px] font-bold">
-                        Đang QL: {detail.quanLyHienTai}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
-                        <label className="text-[10px] text-rose-600 dark:text-rose-400 block font-bold mb-0.5">Mắc mới kỳ này</label>
-                        <NumInput
-                          value={detail.mac || 0}
-                          onChange={val => {
-                            const newDetails = { ...reportData.cancerDetails };
-                            if (!newDetails[type]) newDetails[type] = { mac: 0, macTichLuy: 0, chet: 0, chetTichLuy: 0, ngungDieuTri: 0, quanLyHienTai: 0, note: '' };
-                            newDetails[type].mac = val;
-                            setReportData(prev => ({ ...prev, cancerDetails: newDetails }));
-                          }}
-                        />
-                      </div>
-                      <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
-                        <label className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold mb-0.5">Mắc Tích Lũy</label>
-                        <NumInput
-                          value={detail.macTichLuy || 0}
-                          onChange={val => {
-                            const newDetails = { ...reportData.cancerDetails };
-                            if (!newDetails[type]) newDetails[type] = { mac: 0, macTichLuy: 0, chet: 0, chetTichLuy: 0, ngungDieuTri: 0, quanLyHienTai: 0, note: '' };
-                            newDetails[type].macTichLuy = val;
-                            setReportData(prev => ({ ...prev, cancerDetails: newDetails }));
-                          }}
-                        />
-                      </div>
-                      <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
-                        <label className="text-[10px] text-amber-600 dark:text-amber-400 block font-bold mb-0.5">Số Tử Vong</label>
-                        <NumInput
-                          value={detail.chet || 0}
-                          onChange={val => {
-                            const newDetails = { ...reportData.cancerDetails };
-                            if (!newDetails[type]) newDetails[type] = { mac: 0, macTichLuy: 0, chet: 0, chetTichLuy: 0, ngungDieuTri: 0, quanLyHienTai: 0, note: '' };
-                            newDetails[type].chet = val;
-                            setReportData(prev => ({ ...prev, cancerDetails: newDetails }));
-                          }}
-                        />
-                      </div>
-                      <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
-                        <label className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold mb-0.5">Chết Tích Lũy</label>
-                        <NumInput
-                          value={detail.chetTichLuy || 0}
-                          onChange={val => {
-                            const newDetails = { ...reportData.cancerDetails };
-                            if (!newDetails[type]) newDetails[type] = { mac: 0, macTichLuy: 0, chet: 0, chetTichLuy: 0, ngungDieuTri: 0, quanLyHienTai: 0, note: '' };
-                            newDetails[type].chetTichLuy = val;
-                            setReportData(prev => ({ ...prev, cancerDetails: newDetails }));
-                          }}
-                        />
-                      </div>
-                      <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
-                        <label className="text-[10px] text-slate-500 dark:text-slate-400 block font-semibold mb-0.5">Ngưng điều trị</label>
-                        <NumInput
-                          value={detail.ngungDieuTri || 0}
-                          onChange={val => {
-                            const newDetails = { ...reportData.cancerDetails };
-                            if (!newDetails[type]) newDetails[type] = { mac: 0, macTichLuy: 0, chet: 0, chetTichLuy: 0, ngungDieuTri: 0, quanLyHienTai: 0, note: '' };
-                            newDetails[type].ngungDieuTri = val;
-                            setReportData(prev => ({ ...prev, cancerDetails: newDetails }));
-                          }}
-                        />
-                      </div>
-                      <div className="bg-white dark:bg-slate-900 p-2 rounded-xl border border-purple-200 dark:border-purple-800">
-                        <label className="text-[10px] text-purple-600 dark:text-purple-400 block font-bold mb-0.5">Quản lý hiện tại</label>
-                        <NumInput
-                          value={detail.quanLyHienTai || 0}
-                          onChange={val => {
-                            const newDetails = { ...reportData.cancerDetails };
-                            if (!newDetails[type]) newDetails[type] = { mac: 0, macTichLuy: 0, chet: 0, chetTichLuy: 0, ngungDieuTri: 0, quanLyHienTai: 0, note: '' };
-                            newDetails[type].quanLyHienTai = val;
-                            setReportData(prev => ({ ...prev, cancerDetails: newDetails }));
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="overflow-x-auto px-4 pb-4">
-              <table className="w-full text-left text-xs border-collapse">
+          {/* Smooth Scrollable Cancer Appendix Table */}
+          <div id="cancer-annex-table" className="overflow-x-auto touch-pan-x touch-pan-y px-4 pb-4">
+            <table className="w-full text-left text-xs border-collapse min-w-[700px]">
                 <thead className="bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-bold border border-slate-200 dark:border-slate-700">
                   <tr>
                     <th className="py-2 px-3 border border-slate-200 dark:border-slate-700">Loại ung thư</th>
@@ -2287,52 +2435,72 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
                         />
                       </td>
                       <td className="py-1 px-2 border-slate-200 dark:border-slate-800">
-                        <input
-                          type="text"
-                          value={reportData.cancerDetails?.[type]?.note || ''}
-                          onChange={e => {
-                            const newDetails = { ...reportData.cancerDetails };
-                            if (!newDetails[type]) newDetails[type] = { mac: 0, macTichLuy: 0, chet: 0, chetTichLuy: 0, ngungDieuTri: 0, quanLyHienTai: 0, note: '' };
-                            newDetails[type].note = e.target.value;
-                            setReportData(prev => ({ ...prev, cancerDetails: newDetails }));
-                          }}
-                          placeholder="..."
-                          className="w-full px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 text-xs focus:ring-2 focus:ring-rose-500 outline-none"
-                        />
+                        <div className="flex items-center gap-1.5 min-w-[140px]">
+                          <input
+                            type="text"
+                            value={reportData.cancerDetails?.[type]?.note || ''}
+                            onChange={e => {
+                              const newDetails = { ...reportData.cancerDetails };
+                              if (!newDetails[type]) newDetails[type] = { mac: 0, macTichLuy: 0, chet: 0, chetTichLuy: 0, ngungDieuTri: 0, quanLyHienTai: 0, note: '' };
+                              newDetails[type].note = e.target.value;
+                              setReportData(prev => ({ ...prev, cancerDetails: newDetails }));
+                            }}
+                            placeholder="..."
+                            className="w-full px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-700 text-xs focus:ring-2 focus:ring-rose-500 outline-none truncate"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setSelectedNoteType(type)}
+                            title="Bấm để xem chi tiết hoặc viết ghi chú đầy đủ"
+                            className={`px-2 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all border flex items-center gap-1 shrink-0 ${
+                              reportData.cancerDetails?.[type]?.note?.trim()
+                                ? 'bg-rose-100 text-rose-700 border-rose-300 dark:bg-rose-950 dark:text-rose-300 dark:border-rose-800 shadow-sm'
+                                : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                            }`}
+                          >
+                            <FileText className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                            <span>Xem chi tiết</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
 
-                <tfoot className="bg-slate-100 dark:bg-slate-800 font-bold border border-slate-200 dark:border-slate-700">
-                  <tr>
-                    <td className="py-2 px-3 border-r border-slate-200 dark:border-slate-700 uppercase">Tổng cộng</td>
-                  <td className="py-2 px-3 text-center border-r border-slate-200 dark:border-slate-700">
-                    {CANCER_TYPES.reduce((acc, type) => acc + (reportData.cancerDetails?.[type]?.mac || 0), 0)}
-                  </td>
-                  <td className="py-2 px-3 text-center border-r border-slate-200 dark:border-slate-700">
-                    {CANCER_TYPES.reduce((acc, type) => acc + (reportData.cancerDetails?.[type]?.macTichLuy || 0), 0)}
-                  </td>
-                  <td className="py-2 px-3 text-center border-r border-slate-200 dark:border-slate-700">
-                    {CANCER_TYPES.reduce((acc, type) => acc + (reportData.cancerDetails?.[type]?.chet || 0), 0)}
-                  </td>
-                  <td className="py-2 px-3 text-center border-r border-slate-200 dark:border-slate-700">
-                    {CANCER_TYPES.reduce((acc, type) => acc + (reportData.cancerDetails?.[type]?.chetTichLuy || 0), 0)}
-                  </td>
-                  <td className="py-2 px-3 text-center border-r border-slate-200 dark:border-slate-700">
-                    {CANCER_TYPES.reduce((acc, type) => acc + (reportData.cancerDetails?.[type]?.ngungDieuTri || 0), 0)}
-                  </td>
-                  <td className="py-2 px-3 text-center">
-                    {CANCER_TYPES.reduce((acc, type) => acc + (reportData.cancerDetails?.[type]?.quanLyHienTai || 0), 0)}
-                  </td>
-                  <td className="py-2 px-3 text-center"></td>
-                </tr>
-              </tfoot>
+                <tfoot className="bg-slate-200/90 dark:bg-slate-800 font-extrabold text-slate-900 dark:text-white border-t-2 border-slate-300 dark:border-slate-700">
+                  <tr className="bg-rose-50/60 dark:bg-rose-950/40">
+                    <td className="py-2.5 px-3 border-r border-slate-200 dark:border-slate-700 uppercase text-rose-700 dark:text-rose-300 font-black">TỔNG CỘNG</td>
+                    <td className={`py-2.5 px-3 text-center border-r border-slate-200 dark:border-slate-700 font-bold text-sm ${isDiffMac ? 'bg-amber-200 dark:bg-amber-900/90 text-amber-950 dark:text-amber-100 border-2 border-amber-500 font-black' : 'text-rose-600 dark:text-rose-400'}`}>
+                      <div>{annexMacSum}</div>
+                      {isDiffMac && <div className="text-[10px] font-black text-rose-700 dark:text-rose-300 mt-0.5">⚠️ Báo cáo: {mainMac}</div>}
+                    </td>
+                    <td className="py-2.5 px-3 text-center border-r border-slate-200 dark:border-slate-700 font-bold text-sm">
+                      {CANCER_TYPES.reduce((acc, type) => acc + (Number(reportData.cancerDetails?.[type]?.macTichLuy) || 0), 0)}
+                    </td>
+                    <td className={`py-2.5 px-3 text-center border-r border-slate-200 dark:border-slate-700 font-bold text-sm ${isDiffChet ? 'bg-amber-200 dark:bg-amber-900/90 text-amber-950 dark:text-amber-100 border-2 border-amber-500 font-black' : 'text-slate-700 dark:text-slate-300'}`}>
+                      <div>{annexChetSum}</div>
+                      {isDiffChet && <div className="text-[10px] font-black text-rose-700 dark:text-rose-300 mt-0.5">⚠️ Báo cáo: {mainChet}</div>}
+                    </td>
+                    <td className="py-2.5 px-3 text-center border-r border-slate-200 dark:border-slate-700 font-bold text-sm text-slate-700 dark:text-slate-300">
+                      {CANCER_TYPES.reduce((acc, type) => acc + (Number(reportData.cancerDetails?.[type]?.chetTichLuy) || 0), 0)}
+                    </td>
+                    <td className={`py-2.5 px-3 text-center border-r border-slate-200 dark:border-slate-700 font-bold text-sm ${isDiffNgung ? 'bg-amber-200 dark:bg-amber-900/90 text-amber-950 dark:text-amber-100 border-2 border-amber-500 font-black' : ''}`}>
+                      <div>{annexNgungSum}</div>
+                      {isDiffNgung && <div className="text-[10px] font-black text-rose-700 dark:text-rose-300 mt-0.5">⚠️ Báo cáo: {mainNgung}</div>}
+                    </td>
+                    <td className={`py-2.5 px-3 text-center border-r border-slate-200 dark:border-slate-700 font-black text-sm ${isDiffQuanLy ? 'bg-amber-200 dark:bg-amber-900/90 text-amber-950 dark:text-amber-100 border-2 border-amber-500 font-black' : 'text-rose-600 dark:text-rose-400'}`}>
+                      <div>{annexQuanLySum}</div>
+                      {isDiffQuanLy && <div className="text-[10px] font-black text-rose-700 dark:text-rose-300 mt-0.5">⚠️ Báo cáo: {mainQuanLy}</div>}
+                    </td>
+                    <td className="py-2.5 px-3 text-center text-slate-400 dark:text-slate-500 text-[11px] font-normal">
+                      (Tự động tính)
+                    </td>
+                  </tr>
+                </tfoot>
             </table>
           </div>
-        )}
-      </div>
-    )}
+        </div>
+      )}
   </div>
 
       {/* --- SECTION 9: RỐI LOẠN DO THIẾU I-ỐT --- */}
@@ -2345,7 +2513,7 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
           </h3>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+          <table className="w-full text-left text-xs border-collapse min-w-[800px]">
             <thead className="bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-bold border-b border-slate-200 dark:border-slate-700">
               <tr>
                 <th className="py-2.5 px-3 text-center w-12 border-r border-slate-200 dark:border-slate-700">TT</th>
@@ -2353,7 +2521,19 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
                 <th className="py-2.5 px-3 text-right w-28 border-r border-slate-200 dark:border-slate-700">
                   {viewMode === 'MONTHLY' ? `Tháng ${month}/${year}` : `Trong Quý (${quarterChoice})`}
                 </th>
-                <th className="py-2.5 px-3 text-right w-24 border-r border-slate-200 dark:border-slate-700">Cộng dồn</th>
+                <th className="py-2.5 px-3 text-right min-w-[110px] border-r border-slate-200 dark:border-slate-700">
+                  <div>Cộng dồn</div>
+                  {viewMode === 'QUARTERLY' && (
+                    <div className="text-[10px] font-normal text-amber-700 dark:text-amber-300">
+                      (Đến T{quarterChoice === 'Q1' ? '03' : quarterChoice === 'Q2' ? '06' : quarterChoice === 'Q3' ? '09' : '12'}/{year})
+                    </div>
+                  )}
+                  {viewMode === 'CUSTOM_RANGE' && (
+                    <div className="text-[10px] font-normal text-amber-700 dark:text-amber-300">
+                      (Đến T{toMonth.toString().padStart(2, '0')}/{toYear})
+                    </div>
+                  )}
+                </th>
                 <th className="py-2.5 px-3 text-right w-28 border-r border-slate-200 dark:border-slate-700">
                   {viewMode === 'MONTHLY' ? `Tháng ${month}/${year - 1}` : `Cùng kỳ năm trước`}
                 </th>
@@ -2674,6 +2854,98 @@ export const OfficialMonthlyReport: React.FC<OfficialMonthlyReportProps> = ({ de
             showToast('Đã import dữ liệu Ung thư', 'success');
           }}
         />
+      )}
+
+      {/* Note Detail Modal */}
+      {selectedNoteType && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 max-w-xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Ghi chú chi tiết Loại Ung thư
+                  </h3>
+                  <p className="text-xs text-rose-600 dark:text-rose-400 font-bold mt-0.5">
+                    {selectedNoteType} (Báo cáo Tháng {month}/{year})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedNoteType(null)}
+                className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Metrics Summary Badge */}
+            {reportData.cancerDetails?.[selectedNoteType] && (
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl text-center text-xs border border-slate-200/80 dark:border-slate-700/80">
+                <div>
+                  <div className="text-[10px] text-slate-500 font-medium">Số Mắc</div>
+                  <div className="font-bold text-slate-800 dark:text-slate-200">{reportData.cancerDetails[selectedNoteType].mac || 0}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-500 font-medium">Mắc t.lũy</div>
+                  <div className="font-bold text-slate-800 dark:text-slate-200">{reportData.cancerDetails[selectedNoteType].macTichLuy || 0}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-500 font-medium">Số Chết</div>
+                  <div className="font-bold text-slate-800 dark:text-slate-200">{reportData.cancerDetails[selectedNoteType].chet || 0}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-500 font-medium">Chết t.lũy</div>
+                  <div className="font-bold text-slate-800 dark:text-slate-200">{reportData.cancerDetails[selectedNoteType].chetTichLuy || 0}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-500 font-medium">Ngừng ĐT</div>
+                  <div className="font-bold text-slate-800 dark:text-slate-200">{reportData.cancerDetails[selectedNoteType].ngungDieuTri || 0}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-slate-500 font-medium">Q.Lý h.tại</div>
+                  <div className="font-bold text-rose-600 dark:text-rose-400">{reportData.cancerDetails[selectedNoteType].quanLyHienTai || 0}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Textarea for full note */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                Nội dung ghi chú đầy đủ:
+              </label>
+              <textarea
+                rows={6}
+                value={reportData.cancerDetails?.[selectedNoteType]?.note || ''}
+                onChange={e => {
+                  const newDetails = { ...reportData.cancerDetails };
+                  if (!newDetails[selectedNoteType]) {
+                    newDetails[selectedNoteType] = { mac: 0, macTichLuy: 0, chet: 0, chetTichLuy: 0, ngungDieuTri: 0, quanLyHienTai: 0, note: '' };
+                  }
+                  newDetails[selectedNoteType].note = e.target.value;
+                  setReportData(prev => ({ ...prev, cancerDetails: newDetails }));
+                }}
+                placeholder="Nhập ghi chú chi tiết thông tin lâm sàng, chẩn đoán, chuyển viện hoặc diễn biến bệnh nhân..."
+                className="w-full p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/90 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-rose-500 outline-none leading-relaxed resize-y"
+              />
+              <p className="text-[11px] text-slate-400 text-right">
+                {(reportData.cancerDetails?.[selectedNoteType]?.note || '').length} ký tự
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                onClick={() => setSelectedNoteType(null)}
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-rose-600 text-white hover:bg-rose-500 transition-colors shadow-md shadow-rose-600/20"
+              >
+                Xác nhận & Đóng
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

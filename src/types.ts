@@ -47,10 +47,12 @@ export interface AuditLog {
   timestamp: string;
   userEmail: string;
   userName: string;
-  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'LOCK' | 'UNLOCK' | 'IMPORT' | 'RESTORE';
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'LOCK' | 'UNLOCK' | 'IMPORT' | 'RESTORE' | 'LOGIN' | 'LOGOUT';
   targetType: 'REPORT' | 'DISEASE' | 'USER' | 'SETTINGS';
   targetId: string;
   description: string;
+  ipAddress?: string;
+  deviceInfo?: string;
   changes?: Record<string, { old?: any; new?: any }>;
 }
 
@@ -59,7 +61,6 @@ export interface UserProfile {
   email: string;
   displayName: string;
   photoURL?: string;         // Ảnh đại diện từ Google / Profile
-  password?: string;         // Mật khẩu cho tài khoản thủ công
   role: 'ADMIN' | 'STAFF' | 'VIEWER';
   position?: string;         // Chức vụ công tác: Trưởng trạm, Phó trạm, Y sĩ, Cán bộ chuyên trách...
   unitName: string;
@@ -109,4 +110,33 @@ export interface PatientRecord {
   treatmentProtocol?: string;
   notes?: string;
   updatedAt: string;
+}
+
+export interface GitHubConfig {
+  username: string;
+  token: string;
+  repository: string; // e.g., 'username/repo'
+  branch: string;     // e.g., 'main'
+  folderPath: string; // e.g., 'documents'
+  isConfigured: boolean;
+  lastTestedAt?: string;
+}
+
+export interface MedicalDocument {
+  id: string;
+  documentNumber: string;     // Số ký hiệu (e.g., "123/QĐ-SYT")
+  issuingAuthority?: string;   // Cơ quan ban hành (e.g., "Sở Y tế", "Bộ Y tế", "UBND Tỉnh")
+  title: string;              // Tên văn bản
+  excerpt: string;            // Trích yếu
+  issueDate: string;          // Ngày ban hành
+  status: 'HIEU_LUC' | 'DU_THAO' | 'HET_HIEU_LUC' | 'LUU_TRU'; // Trạng thái
+  fileName: string;           // Tên tệp đã tải lên
+  fileSize: number;           // Dung lượng file (bytes)
+  fileType: string;           // Loại file (PDF, DOCX, Image...)
+  downloadUrl?: string;       // URL tải về / xem tệp
+  fileData?: string;          // Base64 data if saved locally
+  githubPath?: string;        // Đường dẫn file trên GitHub repo
+  githubSha?: string;         // SHA hash trên GitHub (dùng để update/delete)
+  uploadedAt: string;         // Ngày giờ tải lên
+  uploadedBy: string;         // Cán bộ tải lên
 }

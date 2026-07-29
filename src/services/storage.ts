@@ -1,8 +1,7 @@
 import { ReportWithDetails, DiseaseMaster, AuditLog, UserProfile } from '../types';
 import { INITIAL_DISEASES } from '../data/initialDiseases';
-import { generateSampleReports } from '../data/sampleReports';
 import { db } from '../firebase';
-import { collection, doc, setDoc, getDocs, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, deleteDoc, onSnapshot } from 'firebase/firestore';
 
 const KEYS = {
   REPORTS: 'yt_cancer_reports_v1',
@@ -96,52 +95,48 @@ export async function syncAuditLogToFirestore(log: AuditLog): Promise<void> {
   }
 }
 
-// FETCH & MERGE FROM FIRESTORE ON LAUNCH
-export async function fetchAndSyncWithFirestore(): Promise<void> {
+// REALTIME FIRESTORE LISTENERS (No Mock Data, 100% Firestore Sync)
+export function setupRealtimeFirestoreSync(): void {
   try {
-    // 1. Reports
-    const repSnap = await getDocs(collection(db, 'reports'));
-    if (!repSnap.empty) {
-      const remoteReports: ReportWithDetails[] = [];
-      repSnap.forEach(d => remoteReports.push(d.data() as ReportWithDetails));
-      if (remoteReports.length > 0) {
+    // 1. Realtime Reports Listener
+    onSnapshot(collection(db, 'reports'), (snapshot) => {
+      if (!snapshot.empty) {
+        const remoteReports: ReportWithDetails[] = [];
+        snapshot.forEach(d => remoteReports.push(d.data() as ReportWithDetails));
         localStorage.setItem(KEYS.REPORTS, JSON.stringify(remoteReports));
+        window.dispatchEvent(new CustomEvent('reports-updated'));
       }
-    } else {
-      // Seed initial sample reports to Firestore
-      const localReps = getReports();
-      for (const r of localReps) {
-        await syncReportToFirestore(r);
-      }
-    }
+    });
 
-    // 2. Users
-    const userSnap = await getDocs(collection(db, 'users'));
-    if (!userSnap.empty) {
-      const remoteUsers: UserProfile[] = [];
-      userSnap.forEach(d => remoteUsers.push(d.data() as UserProfile));
-      if (remoteUsers.length > 0) {
+    // 2. Realtime Users Listener
+    onSnapshot(collection(db, 'users'), (snapshot) => {
+      if (!snapshot.empty) {
+        const remoteUsers: UserProfile[] = [];
+        snapshot.forEach(d => remoteUsers.push(d.data() as UserProfile));
         localStorage.setItem(KEYS.USERS, JSON.stringify(remoteUsers));
+        window.dispatchEvent(new CustomEvent('users-updated'));
       }
-    } else {
-      // Seed initial users list to Firestore
-      const localUsers = getUsersList();
-      await syncUsersToFirestore(localUsers);
-    }
+    });
 
-    // 3. Unit Config
-    const cfgSnap = await getDocs(collection(db, 'unitConfig'));
-    if (!cfgSnap.empty) {
-      cfgSnap.forEach(d => {
-        if (d.id === 'main') {
-          localStorage.setItem(KEYS.UNIT_CONFIG, JSON.stringify(d.data()));
-        }
-      });
-    } else {
-      await syncUnitConfigToFirestore(getUnitConfig());
-    }
-  } catch (e) {
-    console.warn('Firestore fetch & sync notice:', e);
+    // 3. Realtime Unit Config Listener
+    onSnapshot(doc(db, 'unitConfig', 'main'), (snapshot) => {
+      if (snapshot.exists()) {
+        localStorage.setItem(KEYS.UNIT_CONFIG, JSON.stringify(snapshot.data()));
+        window.dispatchEvent(new CustomEvent('unit-config-updated'));
+      }
+    });
+
+    // 4. Realtime Audit Logs Listener
+    onSnapshot(collection(db, 'auditLogs'), (snapshot) => {
+      if (!snapshot.empty) {
+        const remoteLogs: AuditLog[] = [];
+        snapshot.forEach(d => remoteLogs.push(d.data() as AuditLog));
+        localStorage.setItem(KEYS.LOGS, JSON.stringify(remoteLogs));
+        window.dispatchEvent(new CustomEvent('audit-logs-updated'));
+      }
+    });
+  } catch (err) {
+    console.warn('Realtime sync setup notice:', err);
   }
 }
 
@@ -166,8 +161,8 @@ export function initLocalStorage(): void {
       }
     }
     if (!localStorage.getItem(KEYS.REPORTS)) {
-      const sample = generateSampleReports();
-      localStorage.setItem(KEYS.REPORTS, JSON.stringify(sample));
+      // System skeleton start with empty reports array (No fake reports generated)
+      localStorage.setItem(KEYS.REPORTS, JSON.stringify([]));
     }
     if (!localStorage.getItem(KEYS.USERS)) {
       localStorage.setItem(KEYS.USERS, JSON.stringify(DEFAULT_USERS_LIST));
@@ -188,8 +183,8 @@ export function initLocalStorage(): void {
       localStorage.setItem(KEYS.LOGS, JSON.stringify(initialLogs));
     }
 
-    // Async sync background with Firestore
-    fetchAndSyncWithFirestore().catch(console.error);
+    // Setup realtime listener
+    setupRealtimeFirestoreSync();
   } catch (err) {
     console.error('LocalStorage init error:', err);
   }
@@ -411,42 +406,94 @@ export function saveUnitConfig(cfg: UnitConfig): void {
   syncUnitConfigToFirestore(cfg);
 }
 
-// PREVIEW MODE SETTINGS
-export function getPreviewMode(): boolean {
+// PREVIEW MODE SETTINGS & PASSCODE CONFIG
+export interface PreviewConfig {
+  enabled: boolean;
+  requirePasscode: boolean;
+  passcode: string;
+}
+
+export const DEFAULT_PREVIEW_CONFIG: PreviewConfig = {
+  enabled: false,
+  requirePasscode: false,
+  passcode: '123456'
+};
+
+export function getPreviewConfig(): PreviewConfig {
   try {
     const raw = localStorage.getItem(KEYS.PREVIEW_MODE);
-    if (raw !== null) return JSON.parse(raw);
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === 'object' && parsed !== null) {
+        return { ...DEFAULT_PREVIEW_CONFIG, ...parsed };
+      } else if (typeof parsed === 'boolean') {
+        return { ...DEFAULT_PREVIEW_CONFIG, enabled: parsed };
+      }
+    }
   } catch (e) {
     console.error(e);
   }
-  return false;
+  return DEFAULT_PREVIEW_CONFIG;
 }
 
-export function setPreviewMode(enabled: boolean, user?: { email: string; name: string }): void {
-  localStorage.setItem(KEYS.PREVIEW_MODE, JSON.stringify(enabled));
-  setDoc(doc(db, 'unitConfig', 'previewMode'), { enabled, updatedAt: new Date().toISOString() }, { merge: true }).catch(console.warn);
+export function getPreviewMode(): boolean {
+  return getPreviewConfig().enabled;
+}
+
+export function setPreviewConfig(config: Partial<PreviewConfig>, user?: { email: string; name: string }): PreviewConfig {
+  const current = getPreviewConfig();
+  const updated: PreviewConfig = { ...current, ...config };
+  localStorage.setItem(KEYS.PREVIEW_MODE, JSON.stringify(updated));
+  setDoc(doc(db, 'unitConfig', 'previewMode'), { ...updated, updatedAt: new Date().toISOString() }, { merge: true }).catch(console.warn);
 
   if (user) {
     addAuditLog({
       action: 'UPDATE',
       targetType: 'SETTINGS',
       targetId: 'preview_mode',
-      description: `${enabled ? 'Bật' : 'Tắt'} tính năng Chế độ Xem Báo cáo Công khai (Preview Mode)`,
+      description: `Cập nhật Cấu hình Preview (Trạng thái: ${updated.enabled ? 'BẬT' : 'TẮT'}, Cần Passcode: ${updated.requirePasscode ? 'CÓ' : 'KHÔNG'})`,
       userEmail: user.email,
       userName: user.name
     });
   }
+  return updated;
+}
+
+export function setPreviewMode(enabled: boolean, user?: { email: string; name: string }): void {
+  setPreviewConfig({ enabled }, user);
 }
 
 // BACKUP & RESTORE
 export function exportDatabaseJson(): string {
+  const extraKeys: Record<string, any> = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('yt_cancer_')) {
+        const val = localStorage.getItem(k);
+        if (val) {
+          try {
+            extraKeys[k] = JSON.parse(val);
+          } catch {
+            extraKeys[k] = val;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Export extra keys error:', e);
+  }
+
   const data = {
-    version: '1.0',
+    version: '2.0',
     exportedAt: new Date().toISOString(),
     reports: getReports(),
     diseases: getDiseases(),
     unitConfig: getUnitConfig(),
-    logs: getAuditLogs()
+    users: getUsersList(),
+    previewConfig: getPreviewConfig(),
+    logs: getAuditLogs(),
+    rawStorage: extraKeys
   };
   return JSON.stringify(data, null, 2);
 }
@@ -454,6 +501,17 @@ export function exportDatabaseJson(): string {
 export function restoreDatabaseJson(jsonString: string, user: { email: string; name: string }): boolean {
   try {
     const parsed = JSON.parse(jsonString);
+
+    if (parsed.rawStorage && typeof parsed.rawStorage === 'object') {
+      Object.entries(parsed.rawStorage).forEach(([key, val]) => {
+        if (typeof val === 'object') {
+          localStorage.setItem(key, JSON.stringify(val));
+        } else {
+          localStorage.setItem(key, String(val));
+        }
+      });
+    }
+
     if (parsed.reports && Array.isArray(parsed.reports)) {
       localStorage.setItem(KEYS.REPORTS, JSON.stringify(parsed.reports));
       for (const r of parsed.reports) {
@@ -467,11 +525,22 @@ export function restoreDatabaseJson(jsonString: string, user: { email: string; n
       localStorage.setItem(KEYS.UNIT_CONFIG, JSON.stringify(parsed.unitConfig));
       syncUnitConfigToFirestore(parsed.unitConfig);
     }
+    if (parsed.users && Array.isArray(parsed.users)) {
+      localStorage.setItem(KEYS.USERS, JSON.stringify(parsed.users));
+      syncUsersToFirestore(parsed.users);
+    }
+    if (parsed.previewConfig) {
+      localStorage.setItem(KEYS.PREVIEW_MODE, JSON.stringify(parsed.previewConfig));
+    }
+    if (parsed.logs && Array.isArray(parsed.logs)) {
+      localStorage.setItem(KEYS.LOGS, JSON.stringify(parsed.logs));
+    }
+
     addAuditLog({
       action: 'RESTORE',
       targetType: 'SETTINGS',
       targetId: 'backup',
-      description: 'Phục hồi toàn bộ cơ sở dữ liệu từ file sao lưu JSON',
+      description: 'Phục hồi toàn bộ cơ sở dữ liệu và cấu hình từ file sao lưu JSON',
       userEmail: user.email,
       userName: user.name
     });

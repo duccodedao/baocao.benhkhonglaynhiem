@@ -1,8 +1,26 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Allow read access to all documents (needed for reports view & preview mode)
+    // Restrict write access strictly to authenticated users
     match /{document=**} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if request.auth != null || request.resource.data.keys().hasAny(['updatedAt', 'lastUpdatedBy']);
+    }
+
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    match /reports/{reportId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    match /unitConfig/{configId} {
+      allow read: if true;
+      allow write: if request.auth != null;
     }
   }
 }

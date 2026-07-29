@@ -31,7 +31,6 @@ export const AdminUsers: React.FC = () => {
   // Form Fields
   const [emailInput, setEmailInput] = useState('');
   const [nameInput, setNameInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('123456');
   const [positionInput, setPositionInput] = useState('Cán bộ chuyên trách');
   const [unitInput, setUnitInput] = useState('Trạm Y tế phường Hiệp Thành');
   const [roleInput, setRoleInput] = useState<'ADMIN' | 'STAFF' | 'VIEWER'>('STAFF');
@@ -52,7 +51,6 @@ export const AdminUsers: React.FC = () => {
     setEditingUser(null);
     setEmailInput('');
     setNameInput('');
-    setPasswordInput('123456');
     setPositionInput('Cán bộ Y tế');
     setUnitInput('Trạm Y tế phường Hiệp Thành');
     setRoleInput('STAFF');
@@ -64,7 +62,6 @@ export const AdminUsers: React.FC = () => {
     setEditingUser(target);
     setEmailInput(target.email);
     setNameInput(target.displayName);
-    setPasswordInput(target.password || '123456');
     setPositionInput(target.position || 'Cán bộ Y tế');
     setUnitInput(target.unitName);
     setRoleInput(target.role);
@@ -92,7 +89,6 @@ export const AdminUsers: React.FC = () => {
               ...u,
               email: emailInput.trim(),
               displayName: nameInput.trim(),
-              password: passwordInput.trim() || '123456',
               position: positionInput.trim(),
               unitName: unitInput.trim(),
               role: roleInput,
@@ -107,7 +103,6 @@ export const AdminUsers: React.FC = () => {
         uid: `u_${Date.now()}`,
         email: emailInput.trim(),
         displayName: nameInput.trim(),
-        password: passwordInput.trim() || '123456',
         position: positionInput.trim(),
         unitName: unitInput.trim(),
         role: roleInput,
@@ -295,11 +290,6 @@ export const AdminUsers: React.FC = () => {
                   </td>
                   <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300 font-mono">
                     <div className="font-semibold">{u.email}</div>
-                    {u.password && (
-                      <div className="text-[10px] text-rose-500/80 font-bold mt-0.5">
-                        Mật khẩu: <span className="bg-rose-500/10 px-1.5 py-0.5 rounded">{u.password}</span>
-                      </div>
-                    )}
                   </td>
                   <td className="py-3.5 px-4">
                     <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold ${
@@ -413,19 +403,6 @@ export const AdminUsers: React.FC = () => {
                   onChange={e => setNameInput(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
                   placeholder="Nguyễn Văn A"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Mật khẩu tài khoản (Dùng đăng nhập thủ công)
-                </label>
-                <input
-                  type="text"
-                  value={passwordInput}
-                  onChange={e => setPasswordInput(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-mono font-bold text-slate-900 dark:text-white"
-                  placeholder="123456"
                 />
               </div>
 

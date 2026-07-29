@@ -391,7 +391,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setActiveTab, onSelectRepo
         <div className="flex flex-wrap items-center gap-3 bg-slate-50 dark:bg-slate-800/80 p-2 rounded-2xl border border-slate-200 dark:border-slate-700">
           <div className="flex items-center gap-1.5 px-2">
             <Calendar className="w-4 h-4 text-rose-600" />
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Năm:</span>
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Năm báo cáo:</span>
           </div>
           <select
             value={selectedYear}
@@ -404,23 +404,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ setActiveTab, onSelectRepo
           </select>
 
           <div className="h-5 w-px bg-slate-300 dark:bg-slate-700" />
-
-          <div className="flex items-center gap-1.5 px-2">
-            <Filter className="w-4 h-4 text-rose-600" />
-            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Tháng:</span>
-          </div>
-          <select
-            value={selectedMonth}
-            onChange={e => setSelectedMonth(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))}
-            className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-900 dark:text-white"
-          >
-            <option value="ALL">Tất cả 12 tháng ({selectedYear})</option>
-            {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-              <option key={m} value={m}>
-                Tháng {m}/{selectedYear}
-              </option>
-            ))}
-          </select>
+          <span className="text-xs font-semibold text-rose-600 dark:text-rose-400 px-2">
+            Hiển thị số liệu tổng hợp cả năm
+          </span>
         </div>
       </div>
 
@@ -444,7 +430,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setActiveTab, onSelectRepo
             <span className="text-[10px] text-slate-400 font-medium">Bệnh nhân</span>
           </div>
           <p className="text-[11px] text-slate-500 mt-2">
-            {selectedMonth === 'ALL' ? `Số lượng quản lý tính đến T12/${selectedYear}` : `Số lượng quản lý trong T${selectedMonth}/${selectedYear}`}
+            Tổng số lượng quản lý năm {selectedYear}
           </p>
         </div>
 
@@ -465,7 +451,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setActiveTab, onSelectRepo
             <span className="text-[10px] text-slate-400 font-medium">Ca mới</span>
           </div>
           <p className="text-[11px] text-slate-500 mt-2">
-            {selectedMonth === 'ALL' ? `Tổng mắc mới cả năm ${selectedYear}` : `Mắc mới trong Tháng ${selectedMonth}/${selectedYear}`}
+            Tổng mắc mới cả năm {selectedYear}
           </p>
         </div>
 
@@ -486,7 +472,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setActiveTab, onSelectRepo
             <span className="text-[10px] text-slate-400 font-medium">Ca tử vong</span>
           </div>
           <p className="text-[11px] text-slate-500 mt-2">
-            {selectedMonth === 'ALL' ? `Tổng tử vong cả năm ${selectedYear}` : `Tử vong trong Tháng ${selectedMonth}/${selectedYear}`}
+            Tổng tử vong cả năm {selectedYear}
           </p>
         </div>
 
@@ -507,7 +493,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setActiveTab, onSelectRepo
             <span className="text-[10px] text-slate-400 font-medium">Bệnh nhân</span>
           </div>
           <p className="text-[11px] text-slate-500 mt-2">
-            Biến động ngưng quản lý trong {selectedMonth === 'ALL' ? `năm ${selectedYear}` : `Tháng ${selectedMonth}/${selectedYear}`}
+            Tổng ngưng quản lý cả năm {selectedYear}
           </p>
         </div>
 
@@ -519,10 +505,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ setActiveTab, onSelectRepo
           <div>
             <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-rose-600" />
-              <span>Biểu Đồ Diễn Biến 12 Tháng Trong Năm {selectedYear}</span>
+              <span>Biểu Đồ Diễn Biến Các Tháng Trong Năm {selectedYear}</span>
             </h3>
             <p className="text-xs text-slate-500">
-              Xem diễn biến chi tiết của từng chương trình (chọn tùy chọn bên dưới)
+              Diễn biến số liệu từng tháng trong năm {selectedYear}
             </p>
           </div>
 
@@ -578,43 +564,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ setActiveTab, onSelectRepo
             </LineChart>
           </ResponsiveContainer>
         </div>
-
-        {/* 12 Month Quick Jump Pills */}
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-          <p className="text-xs font-bold text-slate-500 mb-2">Chọn nhanh xem chi tiết từng tháng:</p>
-          <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-12 gap-1.5">
-            {monthly12TrendData.map(m => {
-              const isSelected = selectedMonth === m.monthNum;
-              return (
-                <button
-                  key={m.monthNum}
-                  onClick={() => setSelectedMonth(m.monthNum)}
-                  className={`py-2 px-1 rounded-xl text-center text-xs font-bold transition-all border ${
-                    isSelected
-                      ? 'bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-600/30'
-                      : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
-                  }`}
-                >
-                  <div className="text-[10px] opacity-80">Tháng</div>
-                  <div className="text-sm">{m.monthNum}</div>
-                  <div className="text-[9px] mt-0.5 opacity-90 truncate px-1">
-                    {activeMetric === 'NEW' && `+${m['Tổng số']} mới`}
-                    {activeMetric === 'DEATH' && `${m['Tổng số']} chết`}
-                    {activeMetric === 'MANAGED' && `${m['Tổng số']} q.lý`}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
       </div>
 
       {/* Detailed Breakdown Table using OfficialReportTableView */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 overflow-hidden">
         <OfficialReportTableView
           reportData={dashboardReportData}
-          title={selectedMonth === 'ALL' ? `Chi Tiết Số Liệu Cả Năm ${selectedYear}` : `Chi Tiết Số Liệu Tháng ${selectedMonth}/${selectedYear}`}
-          colCurrentLabel={selectedMonth === 'ALL' ? `Tổng năm ${selectedYear}` : `Tháng ${selectedMonth}`}
+          title={`Chi Tiết Số Liệu Tổng Năm ${selectedYear}`}
+          colCurrentLabel={`Số liệu Tổng năm ${selectedYear}`}
           colPrevLabel="Năm trước"
         />
       </div>

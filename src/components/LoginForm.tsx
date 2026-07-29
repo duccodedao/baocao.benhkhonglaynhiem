@@ -1,20 +1,33 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Building2, Lock, Loader2, Eye, AlertTriangle, X } from 'lucide-react';
-import { getUnitConfig, getPreviewMode } from '../services/storage';
+import { Building2, Lock, Loader2, Eye, AlertTriangle, X, KeyRound, ArrowRight } from 'lucide-react';
+import { getUnitConfig } from '../services/storage';
 
 export const LoginForm: React.FC = () => {
   const {
     accessDeniedEmail,
     loadingAuth,
     previewMode,
+    previewConfig,
     loginWithGooglePopup,
+    loginWithPasscode,
     clearAccessDenied,
     enterPreviewAsGuest
   } = useAuth();
 
+  const [passcode, setPasscode] = useState('');
+  const [passcodeError, setPasscodeError] = useState('');
+
   const unitConfig = getUnitConfig();
-  const isPreviewOn = previewMode || getPreviewMode();
+
+  const handlePasscodeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasscodeError('');
+    const res = loginWithPasscode(passcode);
+    if (!res.success) {
+      setPasscodeError(res.message || 'Mã Passcode không chính xác');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans">
@@ -65,11 +78,13 @@ export const LoginForm: React.FC = () => {
               >
                 Đóng thông báo
               </button>
-              {isPreviewOn && (
+              {previewMode && (
                 <button
                   onClick={() => {
                     clearAccessDenied();
-                    enterPreviewAsGuest();
+                    if (!previewConfig.requirePasscode) {
+                      enterPreviewAsGuest();
+                    }
                   }}
                   className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/30 transition-all flex items-center justify-center gap-1.5"
                 >
@@ -109,7 +124,7 @@ export const LoginForm: React.FC = () => {
                 <span>Đăng nhập Xác thực Google</span>
               </h2>
               <p className="text-xs text-slate-400">
-                Hệ thống tự động đồng bộ ảnh đại diện, họ tên và địa chỉ Gmail của bạn.
+                Hệ thống tự động đồng bộ tài khoản Google và kiểm tra phân quyền.
               </p>
             </div>
 
@@ -133,23 +148,54 @@ export const LoginForm: React.FC = () => {
           </div>
 
           {/* Public Preview Access Mode */}
-          <div className="pt-2 border-t border-slate-700/60 text-center">
-            {isPreviewOn ? (
-              <div className="space-y-2">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-[11px] font-bold">
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Admin đã BẬT Chế độ Xem Báo cáo Công khai (Preview)</span>
+          <div className="pt-4 border-t border-slate-700/60">
+            {previewMode ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-[11px] font-bold">
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Chế độ Xem Báo cáo Công khai (Preview)</span>
+                  </span>
                 </div>
-                <button
-                  onClick={enterPreviewAsGuest}
-                  className="w-full py-2.5 px-4 rounded-xl bg-slate-700/80 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-all border border-slate-600"
-                >
-                  <Eye className="w-4 h-4 text-emerald-400" />
-                  <span>Truy cập Xem Toàn bộ Web (Chỉ Xem)</span>
-                </button>
+
+                {previewConfig.requirePasscode ? (
+                  <form onSubmit={handlePasscodeSubmit} className="space-y-2.5 bg-slate-900/60 p-3.5 rounded-2xl border border-slate-700/80">
+                    <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                      <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Nhập Mã Passcode để Xem Báo cáo:</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="password"
+                        placeholder="Nhập passcode..."
+                        value={passcode}
+                        onChange={e => setPasscode(e.target.value)}
+                        className="flex-1 px-3 py-2 rounded-xl bg-slate-800 text-white border border-slate-700 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                      />
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1 shrink-0"
+                      >
+                        <span>Vào Xem</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    {passcodeError && (
+                      <p className="text-[11px] text-rose-400 font-semibold">{passcodeError}</p>
+                    )}
+                  </form>
+                ) : (
+                  <button
+                    onClick={enterPreviewAsGuest}
+                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-600/90 hover:bg-emerald-600 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md transition-all border border-emerald-500/50"
+                  >
+                    <Eye className="w-4 h-4" />
+                    <span>Truy cập Xem Báo Cáo Ngay (Không cần Đăng nhập)</span>
+                  </button>
+                )}
               </div>
             ) : (
-              <p className="text-[11px] text-slate-400">
+              <p className="text-center text-[11px] text-slate-400">
                 Chế độ xem Preview công khai đang TẮT. Liên hệ Admin để kích hoạt.
               </p>
             )}

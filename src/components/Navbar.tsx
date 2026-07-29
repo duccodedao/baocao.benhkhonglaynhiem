@@ -11,17 +11,45 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  KeyRound,
+  Settings,
+  X,
+  Save,
   Loader2
 } from 'lucide-react';
 
 export const Navbar: React.FC<{ onOpenMobileMenu?: () => void }> = ({ onOpenMobileMenu }) => {
-  const { user, loginWithGooglePopup, loginWithGoogleEmail, logout, loadingAuth, previewMode, togglePreviewMode } = useAuth();
+  const { user, previewConfig, updatePreviewConfig, loginWithGooglePopup, loginWithGoogleEmail, logout, loadingAuth, previewMode, togglePreviewMode } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { showToast, confirmModal } = useToast();
   const unitConfig = getUnitConfig();
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showGoogleModal, setShowGoogleModal] = useState(false);
   const [googleEmailInput, setGoogleEmailInput] = useState('');
+
+  // Preview Config Modal State
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [modalEnabled, setModalEnabled] = useState(previewConfig.enabled);
+  const [modalRequirePasscode, setModalRequirePasscode] = useState(previewConfig.requirePasscode);
+  const [modalPasscode, setModalPasscode] = useState(previewConfig.passcode);
+
+  const handleOpenPreviewModal = () => {
+    setModalEnabled(previewConfig.enabled);
+    setModalRequirePasscode(previewConfig.requirePasscode);
+    setModalPasscode(previewConfig.passcode);
+    setShowPreviewModal(true);
+    setShowUserDropdown(false);
+  };
+
+  const handleSavePreviewConfig = () => {
+    updatePreviewConfig({
+      enabled: modalEnabled,
+      requirePasscode: modalRequirePasscode,
+      passcode: modalPasscode.trim() || '123456'
+    });
+    showToast('Đã lưu cấu hình Chế độ Xem Báo cáo (Preview Mode)', 'success');
+    setShowPreviewModal(false);
+  };
 
   const handleGoogleSignIn = (e: React.FormEvent) => {
     e.preventDefault();
@@ -94,23 +122,7 @@ export const Navbar: React.FC<{ onOpenMobileMenu?: () => void }> = ({ onOpenMobi
         {/* Right: Actions, Theme Toggle, Profile */}
         <div className="flex items-center gap-2 sm:gap-3">
           
-          {/* Admin Preview Mode Toggle Switch Button */}
-          {user && user.role === 'ADMIN' && (
-            <button
-              onClick={handleTogglePreviewMode}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                previewMode
-                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/20'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:text-slate-900 dark:hover:text-white'
-              }`}
-              title="Bật/Tắt chế độ xem báo cáo công khai (Chỉ xem)"
-            >
-              {previewMode ? <Eye className="w-4 h-4 text-emerald-500" /> : <EyeOff className="w-4 h-4" />}
-              <span className="hidden md:inline">
-                {previewMode ? 'Preview Mode: BẬT' : 'Preview Mode: TẮT'}
-              </span>
-            </button>
-          )}
+
 
           {/* Theme Toggle */}
           <button
@@ -300,6 +312,113 @@ export const Navbar: React.FC<{ onOpenMobileMenu?: () => void }> = ({ onOpenMobi
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Preview Mode & Passcode Settings Modal */}
+      {showPreviewModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5 animate-scale-up">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Eye className="w-5 h-5 text-emerald-500" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Cấu hình Chế độ Xem Báo cáo (Preview)
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowPreviewModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-full"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Toggle Enable */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-bold text-slate-900 dark:text-white block">
+                    Kích hoạt Chế độ Preview
+                  </label>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Cho phép xem báo cáo không cần đăng nhập Google
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setModalEnabled(!modalEnabled)}
+                  className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
+                    modalEnabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 rounded-full bg-white shadow-md transition-transform ${
+                      modalEnabled ? 'translate-x-6' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Toggle Passcode Requirement */}
+              {modalEnabled && (
+                <div className="space-y-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                      <KeyRound className="w-4 h-4 text-amber-500" />
+                      <span>Chỉ định người xem (Yêu cầu Passcode)</span>
+                    </label>
+                    <input
+                      type="checkbox"
+                      checked={modalRequirePasscode}
+                      onChange={e => setModalRequirePasscode(e.target.checked)}
+                      className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500"
+                    />
+                  </div>
+
+                  {modalRequirePasscode ? (
+                    <div className="space-y-1.5 pt-2">
+                      <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
+                        Thiết lập Mã Passcode bảo vệ:
+                      </label>
+                      <input
+                        type="text"
+                        value={modalPasscode}
+                        onChange={e => setModalPasscode(e.target.value)}
+                        placeholder="VD: 123456"
+                        className="w-full px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 text-xs font-mono font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 outline-none"
+                      />
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                        Người xem truy cập web sẽ cần nhập mã passcode này để vào xem dữ liệu.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                      Bất kỳ ai truy cập web đều có thể xem báo cáo ngay mà không cần nhập Passcode.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleSavePreviewConfig}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/30 flex items-center gap-1.5"
+              >
+                <Save className="w-4 h-4" />
+                <span>Lưu Cấu Hình</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
